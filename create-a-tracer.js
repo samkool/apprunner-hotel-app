@@ -12,7 +12,6 @@ const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-grpc')
 
 // OTel JS - Core - Instrumentations
 const { HttpInstrumentation } = require('@opentelemetry/instrumentation-http');
-const { MySQLInstrumentation } = require('@opentelemetry/instrumentation-mysql');
 const { AwsInstrumentation } = require('@opentelemetry/instrumentation-aws-sdk');
 const { ExpressInstrumentation } = require('@opentelemetry/instrumentation-express');
 const { Resource } = require('@opentelemetry/resources');
@@ -32,7 +31,6 @@ const tracerConfig = {
   // any instrumentations can be declared here
   instrumentations: [
     new HttpInstrumentation(),
-    new MySQLInstrumentation(),
     new ExpressInstrumentation(),
     new AwsInstrumentation({
       suppressInternalInstrumentation: true
