@@ -18,30 +18,36 @@
 
 var express = require('express');
 var router = express.Router();
-var rds = require('../rds');
+const { ScanCommand } = require("@aws-sdk/lib-dynamodb");
+const dynamodb = require('../dynamodb');
+
 const configPromise = require('../config');
 
 configPromise.then((config) => {
     console.log('Config loaded:', config);
     /* display room list */
-    router.get('/', function(req, res, next) {
-      const [pool, url] = rds();
-      pool.getConnection(function(err, con){
-        if (err) {
-          next(err);
-        }
-        else {
-          con.query('SELECT * FROM hotel.rooms', function(error, results, fields) {
-            con.release();
-            if (err) res.send(err);
-            if (results) {
-              res.render('room-list', { title: 'Room List', menuTitle: config.app.hotel_name, url: url, rooms: results});
-      
-              console.log('displayed %d rooms', results.length);
-            }
+    router.get('/', async function(req, res, next) {
+      try {
+        const client = await dynamodb.initDynamoDBClient();
+        const params = {
+          TableName: config.dynamodb.tableName
+        };
+        
+        const data = await client.send(new ScanCommand(params));
+        
+        if (data.Items) {
+          res.render('room-list', { 
+            title: 'Room List', 
+            menuTitle: config.app.hotel_name, 
+            tableName: config.dynamodb.tableName, 
+            rooms: data.Items
           });
+          console.log('displayed %d rooms', data.Items.length);
         }
-      }); 
+      } catch (err) {
+        console.error("Error retrieving rooms:", err);
+        next(err);
+      }
     });
   }).catch((error) => {
     console.error('Error loading config:', error);

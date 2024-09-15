@@ -18,45 +18,42 @@
 
 var express = require('express');
 var router = express.Router();
-var rds = require('../rds');
-
+const { CreateTableCommand } = require("@aws-sdk/client-dynamodb");
+const dynamodb = require('../dynamodb');
 
 const configPromise = require('../config');
 
+async function createDynamoDBTable(tableName) {
+  const params = {
+    TableName: tableName,
+    KeySchema: [
+      { AttributeName: "id", KeyType: "HASH" }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: "id", AttributeType: "N" }
+    ],
+    ProvisionedThroughput: {
+      ReadCapacityUnits: 5,
+      WriteCapacityUnits: 5
+    }
+  };
+
+  const client = await dynamodb.initDynamoDBClient();
+  return client.send(new CreateTableCommand(params));
+}
+
 configPromise.then((config) => {
-    console.log('Config loaded:', config);
-    router.get('/', function(req, res, next) {
-      const [pool, rdsUrl] = rds();
-      pool.getConnection(function(err, con){
-        if (err) {
-          next(err);
-        }
-        else {
-          console.log("Create table in database if not exists!");
-
-          con.query('CREATE DATABASE IF NOT EXISTS hotel;', function(error, result, fields) {
-            if (err) throw err;
-            console.log(result);
-          });
-      
-          con.query('USE hotel;', function(error, result, fields) {
-            if (err) throw err;
-            console.log(result);
-          });
-      
-          con.query('CREATE TABLE IF NOT EXISTS rooms(id int NOT NULL, floor int, hasView boolean, occupied boolean, comment varchar(60), PRIMARY KEY(id));', function(error, result, fields) {
-            if (err) throw err;
-            console.log(result);
-          });
-      
-          con.release();     
-        }
-      });
-
-      res.render('create', { menuTitle: config.app.hotel_name, url: rdsUrl });
-    });
-  }).catch((error) => {
-    console.error('Error loading config:', error);
+  console.log('Config loaded:', config);
+  router.get('/', async function(req, res, next) {
+    try {
+      await createDynamoDBTable(config.dynamodb.tableName);
+      res.render('create', { menuTitle: config.app.hotel_name, tableName: config.dynamodb.tableName });
+    } catch (error) {
+      console.error('Error creating DynamoDB table:', error);
+      next(error);
+    }
+  });
+}).catch((error) => {
+  console.error('Error loading config:', error);
 });
-
 module.exports = router;

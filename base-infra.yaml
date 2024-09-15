@@ -232,34 +232,6 @@ Resources:
       Tags: 
         - Key: "Name"
           Value: "AppRunnerHotelApp-Service-SG"
-  
-  RDSSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Allow ingress traffic from AppRunner service
-      GroupName: AppRunnerHotelApp-RDS-SG
-      VpcId: !Ref AppRunnerHotelAppVPC
-      Tags: 
-        - Key: "Name"
-          Value: "AppRunnerHotelApp-RDS-SG"
-  
-  RDSSecurityGroupEgress:
-    Type: AWS::EC2::SecurityGroupEgress
-    Properties:
-      GroupId: !Ref RDSSecurityGroup
-      Description: Allow all outbound traffic
-      IpProtocol: "-1"
-      CidrIp: 0.0.0.0/0
-
-  RDSSecurityGroupIngressFromAppRunnerService:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      GroupId: !Ref RDSSecurityGroup
-      Description: Allow inbound traffic to the DB from AppRunner
-      IpProtocol: "tcp"
-      FromPort: 3306
-      ToPort: 3306
-      SourceSecurityGroupId: !Ref AppRunnerServiceSecurityGroup
 
   AppRunnerServiceSecurityGroupEgress:
     Type: AWS::EC2::SecurityGroupEgress
@@ -280,61 +252,19 @@ Resources:
         - !Ref PrivateSubnet3
       VpcConnectorName: AppRunnerHotelApp-RDS-Connector
 
-  DBSubnetGroup:
-    Type: 'AWS::RDS::DBSubnetGroup'
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
     Properties:
-      DBSubnetGroupDescription: !Ref 'AWS::StackName'
-      SubnetIds: 
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-        - !Ref PrivateSubnet3
-
-  AuroraDBSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Description: This is my rds instance secret
-      GenerateSecretString:
-        SecretStringTemplate: '{"username": "apprunner"}'
-        GenerateStringKey: password
-        PasswordLength: 32
-        ExcludeCharacters: "/@\"'\\"
-  
-  SecretRDSInstanceAttachment:
-    Type: AWS::SecretsManager::SecretTargetAttachment
-    Properties:
-      SecretId:
-        Ref: AuroraDBSecret
-      TargetId:
-        Ref: AuroraDBCluster
-      TargetType: AWS::RDS::DBCluster
-
-  AuroraDBCluster:
-    Type: AWS::RDS::DBCluster
-    Properties:
-      Engine: aurora-mysql
-      EngineVersion: "5.7"
-      Port: 3306
-      MasterUsername:
-        Fn::Sub: "{{resolve:secretsmanager:${AuroraDBSecret}::username}}"
-      MasterUserPassword:
-        Fn::Sub: "{{resolve:secretsmanager:${AuroraDBSecret}::password}}"
-      DBSubnetGroupName: !Ref DBSubnetGroup
-      VpcSecurityGroupIds:
-        - !Ref RDSSecurityGroup
-      StorageEncrypted: true
-      Tags: 
-        - Key: "Name"
-          Value: "AppRunnerHotelApp-RDSDBCluster"
-
-  AuroraDBFirstInstance:
-    Type: AWS::RDS::DBInstance
-    Properties:
-      DBInstanceClass: "db.t4g.medium"
-      DBClusterIdentifier: !Ref AuroraDBCluster  
-      Engine: aurora-mysql
-      EngineVersion: "5.7"
-      DBSubnetGroupName: !Ref DBSubnetGroup
-      PubliclyAccessible: false
+      TableName: HotelTable
+      AttributeDefinitions:
+        - AttributeName: "id"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "id"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
 
   AppRunnerECRAccessRole: 
     Type: AWS::IAM::Role
@@ -366,6 +296,19 @@ Resources:
             Action:
               - "sts:AssumeRole"
       Policies:
+       - PolicyName: AppRunnerDynamoDBAccess
+         PolicyDocument:
+           Version: "2012-10-17"
+           Statement:
+             - Effect: Allow
+               Action:
+                 - "dynamodb:PutItem"
+                 - "dynamodb:GetItem"
+                 - "dynamodb:UpdateItem"
+                 - "dynamodb:DeleteItem"
+                 - "dynamodb:Query"
+                 - "dynamodb:Scan"
+               Resource: !GetAtt DynamoDBTable.Arn
        - PolicyName: AppRunnerVPCNetworkingPermissions
          PolicyDocument:
            Version: "2012-10-17"
@@ -408,11 +351,7 @@ Resources:
                Resource: "arn:aws:events:*:*:rule/AWSAppRunnerManagedRule*"
              - Effect: Allow
                Action:
-                 - "secretsmanager:GetSecretValue"
-               Resource: !Ref AuroraDBSecret
-             - Effect: Allow
-               Action:
-                 - "ssm:GetParameters"
+                 - "ssm:GetParameter"
                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${HotelNameParam}
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
@@ -426,9 +365,9 @@ Resources:
       Description: App Runner Hotel Name
 
 Outputs:
-  DBSecret:
-    Description: AWS Secrets Manager secret containing DB credentials
-    Value: !Ref AuroraDBSecret
+  DynamoDBTableName:
+    Description: DynamoDB table name
+    Value: !Ref DynamoDBTable
   HotelName:
     Description: AWS Paramter Store value containing Hotel's name
     Value: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${HotelNameParam}

@@ -18,14 +18,15 @@
 
 var express = require('express');
 var router = express.Router();
-var rds = require('../rds');
+const { PutCommand } = require("@aws-sdk/lib-dynamodb");
+const dynamodb = require('../dynamodb');
 
 const configPromise = require('../config');
 
 configPromise.then((config) => {
     console.log('Config loaded:', config);
     /* Add a new room */
-    router.post('/', function (req, res, next) {
+    router.post('/', async function (req, res, next) {
       if (req.body.roomNumber && req.body.floorNumber && req.body.hasView) {
         
         const roomNumber = req.body.roomNumber;
@@ -34,23 +35,23 @@ configPromise.then((config) => {
 
         console.log('New room request received. roomNumber: %s, floorNumber: %s, hasView: %s', roomNumber, floorNumber, hasView);
         
-        var sql = "INSERT INTO hotel.rooms (id, floor, hasView) VALUES (?, ?, ?)";
-        sqlParams = [roomNumber, floorNumber, hasView];
+        const params = {
+          TableName: config.dynamodb.tableName,
+          Item: {
+            id: roomNumber,
+            floor: floorNumber,
+            hasView: hasView
+          }
+        };
         
-        const [pool, url] = rds();
-        pool.getConnection(function(err, con){
-          if (err) {
-            next(err)
-          }
-          else {
-            con.query(sql, sqlParams, function(err, result, fields) {
-              con.release();
-              if (err) res.send(err);
-              if (result) res.render('add', { title: 'Add new room', view: 'No', result: { roomId: roomNumber } });
-              if (fields) console.log(fields);
-          });
-          }
-        });
+        try {
+          const client = await dynamodb.initDynamoDBClient();
+          await client.send(new PutCommand(params));
+          res.render('add', { title: 'Add new room', view: 'No', result: { roomId: roomNumber } });
+        } catch (err) {
+          console.error("Error adding room:", err);
+          next(err);
+        }
       } else {
         throw new Error('Missing room id, floor or has view parameters');
       }

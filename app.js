@@ -1,10 +1,13 @@
 const AWS = require('aws-sdk');
+const dynamodb = require('./dynamodb');
 
 var createError = require('http-errors');
 var express = require('express');
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
+
+const dbClient = dynamodb.initDynamoDBClient();
 
 var indexRouter = require('./routes/index');
 var createRouter = require('./routes/create');
