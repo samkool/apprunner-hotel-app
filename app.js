@@ -10,7 +10,6 @@ var logger = require('morgan');
 const dbClient = dynamodb.initDynamoDBClient();
 
 var indexRouter = require('./routes/index');
-var createRouter = require('./routes/create');
 var addRouter = require('./routes/add');
 var roomsRouter = require('./routes/rooms');
 var paramsRouter = require('./routes/params');
@@ -28,7 +27,6 @@ app.use(cookieParser());
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter);
-app.use('/create', createRouter);
 app.use('/add', addRouter);
 app.use('/rooms', roomsRouter);
 app.use('/params', paramsRouter);
